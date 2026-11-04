@@ -608,6 +608,51 @@
         }
         .footer i { color: var(--danger); }
 
+
+        /* Android TV / TCL: foco visível, alvos grandes e navegação por controle remoto */
+        :focus { outline: none; }
+        :focus-visible {
+            outline: 4px solid #fff2b8 !important;
+            outline-offset: 4px;
+            box-shadow: 0 0 0 7px rgba(212,175,55,.65), 0 0 28px rgba(212,175,55,.45) !important;
+            position: relative;
+            z-index: 5;
+        }
+        button, input, textarea, .icon-card { -webkit-tap-highlight-color: transparent; }
+        button { min-height: 46px; }
+        .icon-card {
+            min-height: 132px;
+            outline: 3px solid transparent;
+            outline-offset: 3px;
+        }
+        .icon-card:focus, .icon-card:focus-visible {
+            background: #34334b !important;
+            border-color: var(--gold) !important;
+            transform: scale(1.045);
+            outline: 3px solid #fff2b8 !important;
+            box-shadow: 0 0 0 6px rgba(212,175,55,.55), 0 10px 28px rgba(0,0,0,.5) !important;
+        }
+        .btn-action:focus-visible, .btn-primary:focus-visible,
+        .btn-icon-sm:focus-visible, input:focus-visible, textarea:focus-visible {
+            background-color: #3a3650;
+        }
+        .links-grid { scroll-behavior: smooth; overscroll-behavior: contain; }
+        .icon-actions { opacity: 1; }
+        @media (min-width: 700px) {
+            body { padding: 28px 24px; }
+            .container { max-width: 1120px; }
+            .links-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); max-height: 65vh; }
+            .icon-card { min-height: 155px; padding: 20px 14px; }
+            .icon-favicon { width: 58px; height: 58px; }
+            .icon-favicon img { width: 36px; height: 36px; }
+            .icon-name { font-size: 1rem; }
+            .icon-url { font-size: .8rem; }
+            .btn-action, .btn-primary { min-height: 52px; padding: 12px 20px; font-size: .95rem; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+        }
+
         @media (max-width: 480px) {
             h1 { font-size: 1.6rem; }
             .profile-img { width: 70px; height: 70px; }
@@ -669,11 +714,11 @@
             <div class="input-group">
                 <div class="input-wrapper">
                     <i class="fas fa-tag"></i>
-                    <input type="text" id="siteName" placeholder="Nome do site" onkeypress="handleEnter(event)">
+                    <input type="text" id="siteName" aria-label="Nome do site" placeholder="Nome do site" onkeypress="handleEnter(event)">
                 </div>
                 <div class="input-wrapper">
                     <i class="fas fa-link"></i>
-                    <input type="text" id="siteUrl" placeholder="URL do site" onkeypress="handleEnter(event)">
+                    <input type="text" id="siteUrl" aria-label="URL do site" placeholder="URL do site" onkeypress="handleEnter(event)">
                 </div>
                 <button onclick="saveLink()" class="btn-primary" id="saveBtn">
                     <i class="fas fa-save"></i>
@@ -707,7 +752,7 @@
                 </span>
             </div>
             <div class="backup-input-group">
-                <textarea id="backupCode" placeholder="Cole o código de backup ou ID da nuvem aqui..."></textarea>
+                <textarea id="backupCode" aria-label="Código de backup ou ID da nuvem" placeholder="Cole o código de backup ou ID da nuvem aqui..."></textarea>
                 <button class="copy-btn" onclick="copyBackupCode()" title="Copiar">
                     <i class="fas fa-copy"></i>
                 </button>
@@ -859,7 +904,16 @@
                 const favicon = getFaviconUrl(link.url);
                 const card = document.createElement('div');
                 card.className = 'icon-card';
+                card.tabIndex = 0;
+                card.setAttribute("role", "link");
+                card.setAttribute("aria-label", "Abrir " + link.name);
+                card.dataset.remoteItem = "true";
                 card.onclick = () => openLink(link.url);
+                card.onkeydown = (event) => {
+                    if (event.key === "Enter" || event.key === " " || event.key === "OK" || event.keyCode === 23 || event.keyCode === 66) {
+                        event.preventDefault(); openLink(link.url);
+                    }
+                };
                 card.innerHTML = `
                     <div class="icon-actions">
                         <button class="btn-icon-sm" onclick="event.stopPropagation(); editarLink(${index})" title="Editar">
@@ -886,7 +940,8 @@
         }
 
         function openLink(url) {
-            window.open(url, '_blank');
+            // Evita bloqueio de pop-up comum em navegadores de Smart TV.
+            window.location.href = url;
         }
 
         function handleEnter(e) {
@@ -1119,6 +1174,112 @@
                 showToast('Erro de conexão ao baixar dados.', 'error');
             }
         }
+
+        // Navegação pelo direcional (D-pad) dos controles Android TV / TCL.
+        (function configurarControleRemoto() {
+            const seletorFocavel = [
+                'button:not([disabled])', 'input:not([disabled])', 'textarea:not([disabled])',
+                'a[href]', '[tabindex="0"]'
+            ].join(',');
+
+            function visivel(el) {
+                if (!el || !el.getClientRects().length) return false;
+                const s = getComputedStyle(el);
+                return s.visibility !== 'hidden' && s.display !== 'none';
+            }
+
+            function itensVisiveis() {
+                return [...document.querySelectorAll(seletorFocavel)].filter(el =>
+                    visivel(el) && el.getAttribute('tabindex') !== '-1'
+                );
+            }
+
+            function moverFoco(direcao) {
+                const atual = document.activeElement;
+                const itens = itensVisiveis();
+                if (!itens.length) return;
+
+                if (!atual || !itens.includes(atual)) {
+                    const primeiro = direcao === 'up' || direcao === 'left'
+                        ? itens[itens.length - 1] : itens[0];
+                    primeiro.focus();
+                    primeiro.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                    return;
+                }
+
+                const a = atual.getBoundingClientRect();
+                const ax = a.left + a.width / 2;
+                const ay = a.top + a.height / 2;
+                let melhor = null, melhorCusto = Infinity;
+
+                for (const candidato of itens) {
+                    if (candidato === atual) continue;
+                    const r = candidato.getBoundingClientRect();
+                    const dx = (r.left + r.width / 2) - ax;
+                    const dy = (r.top + r.height / 2) - ay;
+
+                    const alinhado =
+                        (direcao === 'right' && dx > 2) ||
+                        (direcao === 'left' && dx < -2) ||
+                        (direcao === 'down' && dy > 2) ||
+                        (direcao === 'up' && dy < -2);
+                    if (!alinhado) continue;
+
+                    const principal = (direcao === 'left' || direcao === 'right') ? Math.abs(dx) : Math.abs(dy);
+                    const secundario = (direcao === 'left' || direcao === 'right') ? Math.abs(dy) : Math.abs(dx);
+                    const custo = principal + secundario * 2.2;
+                    if (custo < melhorCusto) { melhorCusto = custo; melhor = candidato; }
+                }
+
+                if (melhor) {
+                    melhor.focus();
+                    melhor.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                } else if (direcao === 'down' || direcao === 'up') {
+                    // Permite que a página acompanhe o foco quando não há outro controle na mesma direção.
+                    window.scrollBy({ top: direcao === 'down' ? window.innerHeight * .65 : -window.innerHeight * .65, behavior: 'smooth' });
+                }
+            }
+
+            document.addEventListener('keydown', function(event) {
+                const key = event.key;
+                const code = event.keyCode;
+                const mapa = {
+                    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right'
+                };
+                const direcao = mapa[key] ||
+                    (code === 19 ? 'up' : code === 20 ? 'down' : code === 21 ? 'left' : code === 22 ? 'right' : null);
+
+                if (direcao) {
+                    event.preventDefault();
+                    moverFoco(direcao);
+                    return;
+                }
+
+                // OK/Enter: o navegador dispara click nativamente em botões; cards têm handler próprio.
+                if (key === 'Backspace' || key === 'Escape' || code === 4 || code === 8) {
+                    const modal = document.getElementById('confirmModal');
+                    if (modal && modal.classList.contains('active')) {
+                        event.preventDefault(); closeModal(); return;
+                    }
+                    if (editIndex !== -1) {
+                        event.preventDefault(); cancelEdit(); return;
+                    }
+                    if (document.activeElement && document.activeElement !== document.body &&
+                        document.activeElement.matches('input, textarea')) {
+                        document.activeElement.blur();
+                    }
+                }
+            }, { passive: false });
+
+            // Mantém o foco no controle acionado e impede que o foco fique invisível ao rolar.
+            document.addEventListener('focusin', function(event) {
+                const el = event.target;
+                if (el && el.matches && el.matches(seletorFocavel)) {
+                    el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                }
+            });
+        })();
+
     </script>
 </body>
 </html>
